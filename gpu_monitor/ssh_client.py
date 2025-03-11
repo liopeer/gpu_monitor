@@ -2,6 +2,7 @@
 import os
 import paramiko
 from paramiko import config
+from paramiko.proxy import ProxyCommand
 from dataclasses import dataclass
 from typing import List, Dict
 
@@ -32,12 +33,21 @@ class SSHClient:
     def get_connection_params(self) -> Dict:
         """Get connection parameters from SSH config."""
         config = self.ssh_config.lookup(self.hostname)
-        return {
+        
+        # Basic connection parameters
+        params = {
             'hostname': config.get('hostname', self.hostname),
             'username': config.get('user'),
             'port': int(config.get('port', 22)),
             'key_filename': config.get('identityfile', [None])[0],
         }
+        
+        # Add proxy command if present
+        proxy_command = config.get('proxycommand')
+        if proxy_command:
+            params['sock'] = ProxyCommand(proxy_command)
+        
+        return params
 
     def get_gpu_metrics(self) -> List[GPUMetrics]:
         """Connect to host and get GPU metrics using nvidia-smi."""
@@ -57,7 +67,7 @@ class SSHClient:
             return metrics
             
         except Exception as e:
-            print(f"Error connecting to {self.hostname}: {str(e)}")
+            print(f"Error connecting to {self.hostname} (with proxy if configured): {str(e)}")
             return []
         finally:
             self.client.close()
