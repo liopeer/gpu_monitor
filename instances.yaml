@@ -1,0 +1,4 @@
+instances:
+  - dlmachine
+  - compute-05-ubuntu-8xh100
+  - compute-04-ubuntu-8xh100
