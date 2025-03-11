@@ -65,6 +65,23 @@ def create_gpu_charts(title, memory_used, memory_total, utilization):
     
     return [mem_fig, util_fig]
 
+def get_idle_gpus(metrics_dict, threshold=5):
+    """Get GPUs with memory utilization below threshold."""
+    idle_gpus = []
+    for instance, metrics in metrics_dict.items():
+        if not metrics:
+            continue
+        idle_count = sum(1 for gpu in metrics if (gpu.memory_used / gpu.memory_total * 100) < threshold)
+        if idle_count > 0:
+            total_gpus = len(metrics)
+            model = metrics[0].model  # Assuming all GPUs on one instance are same model
+            idle_gpus.append({
+                'instance': instance,
+                'idle_ratio': f"{idle_count}/{total_gpus}",
+                'model': model
+            })
+    return idle_gpus
+
 # Create tabs for each instance
 tabs = [dbc.Tab(label="Overview", tab_id="overview")]
 tabs.extend([
@@ -76,7 +93,7 @@ app.layout = dbc.Container([
     html.H1("GPU Monitor Dashboard"),
     dbc.Tabs(tabs, id="tabs", active_tab="overview"),
     html.Div(id="tab-content"),
-    dcc.Interval(id='interval-component', interval=5*1000)  # 5 second refresh
+    dcc.Interval(id='interval-component', interval=30*1000)  # 5 second refresh
 ])
 
 @app.callback(
@@ -102,12 +119,32 @@ def render_tab_content(active_tab, n):
         if not mean_metrics:
             return html.Div("No data available from any instance")
         
+        # Create pie charts
         figures = create_gpu_charts(
             "Fleet Average",
             mean_metrics['mean_memory_used'],
             mean_metrics['mean_memory_total'],
             mean_metrics['mean_utilization']
         )
+        
+        # Get idle GPUs and create table
+        idle_gpus = get_idle_gpus(metrics_dict)
+        idle_table = dbc.Table([
+            html.Thead([
+                html.Tr([
+                    html.Th("Instance"),
+                    html.Th("Idle/Total GPUs"),
+                    html.Th("GPU Model")
+                ])
+            ]),
+            html.Tbody([
+                html.Tr([
+                    html.Td(gpu['instance']),
+                    html.Td(gpu['idle_ratio']),
+                    html.Td(gpu['model'])
+                ]) for gpu in idle_gpus
+            ])
+        ], bordered=True, dark=True, hover=True)
         
         return dbc.Container([
             dbc.Row([
@@ -116,6 +153,12 @@ def render_tab_content(active_tab, n):
             dbc.Row([
                 dbc.Col(dcc.Graph(figure=fig), width=6)
                 for fig in figures
+            ]),
+            dbc.Row([
+                dbc.Col(html.H3("Idle GPUs (< 5% Memory Usage)", className="text-center mt-4"), width=12)
+            ]),
+            dbc.Row([
+                dbc.Col(idle_table, width=12)
             ])
         ])
     else:
