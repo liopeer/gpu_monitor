@@ -13,6 +13,7 @@ class GPUMetrics:
     memory_used: int
     memory_total: int
     gpu_utilization: int
+    model: str
 
 class SSHClient:
     """Handle SSH connections and command execution."""
@@ -56,13 +57,15 @@ class SSHClient:
             conn_params = self.get_connection_params()
             self.client.connect(**{k: v for k, v in conn_params.items() if v is not None})
             
-            cmd = "nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits"
+            cmd = "nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu,name --format=csv,noheader,nounits"
             stdin, stdout, stderr = self.client.exec_command(cmd)
             
             metrics = []
             for line in stdout:
-                idx, mem_used, mem_total, util = map(int, line.strip().split(', '))
-                metrics.append(GPUMetrics(idx, mem_used, mem_total, util))
+                parts = line.strip().split(', ')
+                idx, mem_used, mem_total, util = map(int, parts[:4])
+                model = parts[4]
+                metrics.append(GPUMetrics(idx, mem_used, mem_total, util, model))
             
             return metrics
             
